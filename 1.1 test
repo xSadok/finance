@@ -264,10 +264,10 @@
         }
         
         /* Overlay de Carregamento */
-        #loading-overlay, #auth-choice-overlay {
+        #loading-overlay {
             position: fixed;
             inset: 0;
-            background-color: rgba(15, 23, 42, 0.95);
+            background-color: rgba(15, 23, 42, 0.8);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -292,37 +292,48 @@
             background-color: #4f46e5;
             color: white;
         }
-
+        
+        /* Tela de Boas-Vindas */
+        #welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        
+        /* Abas do Modal de Recorrentes */
+        .recurring-tab-btn.active {
+            background-color: #4f46e5;
+            color: white;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-300 antialiased">
 
-    <!-- Overlay de Escolha de Autenticação -->
-    <div id="auth-choice-overlay" class="hidden">
-        <div class="text-center">
-            <h1 class="text-3xl font-bold text-white mb-2">Bem-vindo(a)</h1>
-            <p class="text-slate-400 mb-8">Como você deseja começar?</p>
-            <div class="space-y-4">
-                <button id="anonymous-login-btn" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
-                    Entrar Anonimamente
-                </button>
-                <button id="go-to-login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
-                    Fazer Login ou Criar Conta
-                </button>
-            </div>
-            <p class="text-xs text-slate-500 mt-6 max-w-xs mx-auto">
-                Acesso anônimo salva os dados apenas neste navegador. Crie uma conta para acessar de qualquer lugar.
-            </p>
-        </div>
-    </div>
-
     <!-- Overlay de Carregamento -->
     <div id="loading-overlay">
         <div class="spinner"></div>
-        <p class="text-white mt-4 font-semibold">Conectando...</p>
+        <p id="loading-message" class="text-white mt-4 font-semibold">Conectando...</p>
     </div>
 
-    <main id="main-content" class="max-w-4xl w-full mx-auto">
+    <!-- Tela de Boas-Vindas / Escolha de Login -->
+    <div id="welcome-screen" class="p-6">
+        <h1 class="text-4xl font-bold text-white mb-4">Bem-vindo(a)</h1>
+        <p class="text-slate-400 mb-8 max-w-sm">Seu gestor financeiro pessoal. Escolha como deseja continuar.</p>
+        <div class="space-y-4 w-full max-w-xs">
+            <button id="login-or-signup-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-transform hover:scale-105">
+                Fazer Login / Criar Conta
+            </button>
+            <button id="anonymous-login-btn" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-lg transition-transform hover:scale-105">
+                Entrar Anonimamente
+            </button>
+        </div>
+        <p class="text-xs text-slate-500 mt-8">Ao entrar anonimamente, seus dados ficam salvos apenas neste navegador. Crie uma conta para acessá-los de qualquer lugar.</p>
+    </div>
+
+    <main id="main-content" class="max-w-4xl w-full mx-auto hidden">
         <section id="home-page" class="page p-4 md:p-6">
             <header class="mb-6">
                 <div class="flex justify-between items-center mb-4">
@@ -413,7 +424,7 @@
         </section>
     </main>
 
-    <nav id="main-nav" class="fixed bg-slate-800 border-slate-700 flex justify-around max-w-4xl mx-auto">
+    <nav id="main-nav" class="fixed bg-slate-800 border-slate-700 flex justify-around max-w-4xl mx-auto hidden">
         <button data-page="home" class="nav-item flex-1 text-center py-3 text-slate-400 active"><i class="fas fa-home text-xl"></i><span class="block text-xs">Principal</span></button>
         <button data-page="cards" class="nav-item flex-1 text-center py-3 text-slate-400"><i class="fas fa-credit-card text-xl"></i><span class="block text-xs">Cartões</span></button>
         <div class="flex-shrink-0 w-16">
@@ -448,7 +459,7 @@
         // ===============================================
         // A. STATE, CONFIG & FIREBASE SETUP
         // ===============================================
-        const APP_VERSION = 3.3; // Versão com fluxo de login e ajustes
+        const APP_VERSION = 4.0; // Versão com novo fluxo de login e funcionalidades
 
         // =======================================================================
         // PLACEHOLDERS PARA GITHUB ACTIONS - NÃO EDITE DIRETAMENTE
@@ -495,20 +506,23 @@
                 
                 // Monitora o estado de autenticação do usuário
                 onAuthStateChanged(auth, user => {
-                    updateAuthUI(user); // Atualiza a UI com base no status do usuário
                     if (user) {
                         // Usuário está logado (anonimamente ou não)
                         userId = user.uid;
                         console.log("Usuário autenticado com ID:", userId);
-                        document.getElementById('auth-choice-overlay').classList.add('hidden');
+                        document.getElementById('loading-message').textContent = 'Carregando dados...';
                         document.getElementById('loading-overlay').style.display = 'flex';
+                        document.getElementById('welcome-screen').style.display = 'none';
                         setupRealtimeListener(userId); // Começa a ouvir os dados do usuário
                     } else {
-                        // Usuário não está logado, mostra tela de escolha
-                        console.log("Nenhum usuário. Mostrando tela de escolha.");
+                        // Usuário não está logado, exibe a tela de boas-vindas
+                        console.log("Nenhum usuário logado. Exibindo tela de boas-vindas.");
                         document.getElementById('loading-overlay').style.display = 'none';
-                        document.getElementById('auth-choice-overlay').classList.remove('hidden');
+                        document.getElementById('welcome-screen').style.display = 'flex';
+                        document.getElementById('main-content').classList.add('hidden');
+                        document.getElementById('main-nav').classList.add('hidden');
                     }
+                    updateAuthUI(user);
                 });
             } catch (error) {
                 console.error("Erro ao inicializar o Firebase:", error);
@@ -553,8 +567,8 @@
                     // Garantir que novas propriedades do estado existam
                     if (!appState.chatHistory) appState.chatHistory = [];
                     if (!appState.recurringTransactions) appState.recurringTransactions = [];
+                    if (!appState.archivedRecurringTransactions) appState.archivedRecurringTransactions = [];
                     if (!appState.balanceOverrides) appState.balanceOverrides = {};
-                    if (!appState.invoiceOverrides) appState.invoiceOverrides = {}; // NOVO: Para ajuste de fatura
                     if (!appState.settings) appState.settings = getInitialState().settings;
 
                     initializeUI();
@@ -569,6 +583,9 @@
                 historyIndex = 0;
                 updateUndoRedoButtons();
                 
+                // Exibe o conteúdo principal do app
+                document.getElementById('main-content').classList.remove('hidden');
+                document.getElementById('main-nav').classList.remove('hidden');
                 document.getElementById('loading-overlay').style.opacity = '0';
                 setTimeout(() => {
                     document.getElementById('loading-overlay').style.display = 'none';
@@ -683,10 +700,6 @@
             toast.classList.add('show');
             toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3000);
         }
-
-        // A partir daqui, o restante do seu código (lógica de cálculo, renderização de UI, modais, etc.)
-        // permanece EXATAMENTE O MESMO. A única mudança fundamental foi a camada de dados,
-        // que agora usa `saveAppState()` para salvar na nuvem em vez de localmente.
 
         // ===============================================
         // C. CORE LOGIC (Calculations, Filters)
@@ -863,30 +876,16 @@
             const invoiceTotal = invoiceTransactions.reduce((sum, t) => sum + t.amount, 0);
             const invoicePaid = invoicePayments.reduce((sum, t) => sum + t.amount, 0);
 
-            // NOVO: Lógica de ajuste de fatura
-            const monthKey = `${targetDueDate.getUTCFullYear()}-${String(targetDueDate.getUTCMonth() + 1).padStart(2, '0')}`;
-            const invoiceOverrideKey = `${card.id}-${monthKey}`;
-            const adjustedTotal = appState.invoiceOverrides[invoiceOverrideKey];
-            const finalTotal = adjustedTotal !== undefined ? adjustedTotal : invoiceTotal;
-            const adjustmentAmount = adjustedTotal !== undefined ? adjustedTotal - invoiceTotal : 0;
-
             let status = 'Aberta';
             if (today > closeDate) {
-                 status = (finalTotal > 0 && (finalTotal - invoicePaid) < 1) ? 'Paga' : 'Fechada';
+                 status = (invoiceTotal > 0 && (invoiceTotal - invoicePaid) < 1) ? 'Paga' : 'Fechada';
             }
-            if ((finalTotal > 0) && (finalTotal - invoicePaid) < 1) {
+            if ((invoiceTotal > 0) && (invoiceTotal - invoicePaid) < 1) {
                 status = 'Paga';
             }
 
             return {
-                invoice: { 
-                    transactions: invoiceTransactions, 
-                    payments: invoicePayments, 
-                    total: invoiceTotal, 
-                    paid: invoicePaid,
-                    adjustedTotal: finalTotal, // NOVO
-                    adjustmentAmount: adjustmentAmount // NOVO
-                },
+                invoice: { transactions: invoiceTransactions, payments: invoicePayments, total: invoiceTotal, paid: invoicePaid },
                 status,
                 dueDate: targetDueDate
             };
@@ -914,14 +913,7 @@
 
             const invoiceTotal = invoiceTransactions.reduce((sum, t) => sum + t.amount, 0);
             const paidForThisInvoice = invoicePayments.reduce((sum, t) => sum + t.amount, 0);
-            
-            // NOVO: Aplicar ajuste de fatura no resumo
-            const monthKey = `${dueDate.getUTCFullYear()}-${String(dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
-            const invoiceOverrideKey = `${card.id}-${monthKey}`;
-            const adjustedTotal = appState.invoiceOverrides[invoiceOverrideKey];
-            const finalTotal = adjustedTotal !== undefined ? adjustedTotal : invoiceTotal;
-            
-            const currentInvoiceValue = finalTotal - paidForThisInvoice;
+            const currentInvoiceValue = invoiceTotal - paidForThisInvoice;
 
             return { total, currentInvoiceValue, dueDate };
         }
@@ -937,19 +929,19 @@
             document.querySelector(`.nav-item[data-page="${pageId}"]`).classList.add('active');
             if (pageId !== 'cards') appState.ui.selectedCardId = null;
             
-            if (pageId === 'home') renderHomePage();
-            else if (pageId === 'cards') renderCardsPage();
+            if (pageId === 'home' || pageId === 'cards') updateUI();
             else if (pageId === 'planning') renderPlanningPage();
             else if (pageId === 'chat') renderChatPage();
         }
 
-        function renderHomePage() {
-            if (!appState || !appState.homeView) return;
+        function updateUI() {
+            if (!appState || !appState.homeView) return; // Proteção contra renderização prematura
             renderDateNavigator('home');
             const homeTransactions = getFilteredTransactions('home', getTransactionEffectiveDate);
             renderSummary(homeTransactions);
             renderCategories();
             renderTransactions(homeTransactions);
+            renderCardsPage();
         }
 
         function updateAuthUI(user) {
@@ -1164,16 +1156,9 @@
 
             const { invoice, status, dueDate } = getInvoiceDetails(card, appState.ui.selectedInvoiceDate);
             const statusColor = status === 'Paga' ? 'text-green-400' : (status === 'Fechada' ? 'text-red-400' : 'text-yellow-400');
-            const remainingValue = invoice.adjustedTotal - invoice.paid;
+            const remainingValue = invoice.total - invoice.paid;
             const allInvoiceItems = [...invoice.transactions.map(tx => ({ ...tx, itemType: 'expense' })), ...invoice.payments.map(tx => ({ ...tx, itemType: 'payment' }))];
             
-            let adjustmentHTML = '';
-            if (invoice.adjustmentAmount !== 0) {
-                const adjColor = invoice.adjustmentAmount > 0 ? 'text-red-400' : 'text-green-400';
-                const adjSign = invoice.adjustmentAmount > 0 ? '+' : '';
-                adjustmentHTML = `<p class="text-xs ${adjColor}">Original ${formatCurrency(invoice.total)} (${adjSign}${formatCurrency(invoice.adjustmentAmount)})</p>`;
-            }
-
             let transactionsHTML = '<div class="p-4 text-sm text-slate-400">Nenhuma movimentação nesta fatura.</div>';
             if (allInvoiceItems.length > 0) {
                 transactionsHTML = allInvoiceItems.sort((a, b) => new Date(b.date) - new Date(a.date)).map(item => {
@@ -1186,7 +1171,7 @@
                     }
                 }).join('');
             }
-            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.adjustedTotal)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}${adjustmentHTML}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p><div class="flex gap-2 mt-2"><button class="adjust-invoice-btn bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}"><i class="fas fa-sliders-h"></i></button>${status !== 'Paga' ? `<button class="pay-invoice-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}</div></div></div></div><div>${transactionsHTML}</div></div>`;
+            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.total)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p><div class="flex gap-2 mt-2">${status !== 'Paga' ? `<button class="pay-invoice-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}<button class="adjust-invoice-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Ajustar</button></div></div></div></div><div>${transactionsHTML}</div></div>`;
         }
 
         function renderPlanningPage() {
@@ -1368,7 +1353,7 @@
                                 appState.transactions = appState.transactions.filter(t => t.id !== tx.id);
                             }
                             saveAppState();
-                            closeModal(); renderHomePage(); showToast('Transação excluída!');
+                            closeModal(); updateUI(); showToast('Transação excluída!');
                         });
                     });
                 }
@@ -1401,7 +1386,7 @@
                             appState.categories = appState.categories.filter(c => c.name !== categoryName);
                             appState.transactions.forEach(t => { if (t.category === categoryName) t.category = 'Outros'; });
                             saveAppState();
-                            closeModal(); renderHomePage(); showToast('Categoria excluída!');
+                            closeModal(); updateUI(); showToast('Categoria excluída!');
                         });
                     });
                 }
@@ -1444,7 +1429,7 @@
                             appState.transactions = appState.transactions.filter(t => t.source !== cardId);
                             appState.cards = appState.cards.filter(c => c.id !== cardId);
                             saveAppState();
-                            closeModal(); renderCardsPage(); showToast('Cartão excluído!');
+                            closeModal(); updateUI(); showToast('Cartão excluído!');
                         });
                     });
                 }
@@ -1598,7 +1583,7 @@
 
                 document.querySelector('#modal-backdrop .cancel-btn').addEventListener('click', () => {
                     saveAppState();
-                    renderHomePage();
+                    updateUI();
                 });
             });
         }
@@ -1619,7 +1604,7 @@
         function setupPayInvoiceModal(cardId, invoiceDate) {
             const card = appState.cards.find(c => c.id === cardId);
             const { invoice } = getInvoiceDetails(card, invoiceDate);
-            const amountToPay = invoice.adjustedTotal - invoice.paid;
+            const amountToPay = invoice.total - invoice.paid;
             const amountForInput = `R$ ${(amountToPay / 100).toFixed(2).replace('.', ',')}`;
 
             const modalHTML = `
@@ -1649,6 +1634,38 @@
                 paymentInput.addEventListener('input', () => formatCurrencyInput(paymentInput));
             });
         }
+        
+        // NOVO: Modal de Ajuste de Fatura
+        function setupInvoiceAdjustModal(cardId, invoiceDate) {
+            const card = appState.cards.find(c => c.id === cardId);
+            const { invoice } = getInvoiceDetails(card, invoiceDate);
+            const currentTotal = invoice.total;
+            const amountForInput = `R$ ${(currentTotal / 100).toFixed(2).replace('.', ',')}`;
+
+            const modalHTML = `
+                <div class="p-6">
+                    <h2 class="text-xl font-bold text-white mb-4">Ajustar Fatura</h2>
+                    <form id="adjustInvoiceForm" data-card-id="${cardId}" data-invoice-date="${invoiceDate}" data-current-total="${currentTotal}">
+                        <p class="text-slate-400 text-sm mb-1">Fatura de ${new Date(invoiceDate).toLocaleDateString('pt-BR', {month: 'long', year: 'numeric', timeZone: 'UTC'})}</p>
+                        <p class="text-slate-400 mb-4">Insira o valor final correto da fatura. O sistema criará uma transação de ajuste para a diferença.</p>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-slate-400 mb-1">Valor Final Correto</label>
+                            <input type="text" id="finalAmount" inputmode="decimal" value="${amountForInput}" class="w-full bg-slate-700 p-2 rounded-lg" required>
+                        </div>
+                        <div class="flex justify-end gap-3 mt-6">
+                            <button type="button" class="cancel-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Salvar Ajuste</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(modalHTML, () => {
+                const finalAmountInput = document.getElementById('finalAmount');
+                finalAmountInput.addEventListener('input', () => formatCurrencyInput(finalAmountInput));
+            });
+        }
+
 
         function setupPlanningCategoryModal() {
             const currentDate = new Date(appState.planningView.date);
@@ -1820,7 +1837,7 @@
                     document.getElementById('remove-override-btn').addEventListener('click', () => {
                         delete appState.balanceOverrides[monthKey];
                         saveAppState();
-                        renderHomePage();
+                        updateUI();
                         closeModal();
                         showToast('Ajuste de saldo removido.');
                     });
@@ -1874,7 +1891,7 @@
                         delete appState.balanceOverrides[monthKey];
                         saveAppState();
                         renderList();
-                        renderHomePage();
+                        updateUI();
                         showToast('Ajuste removido.');
                     }
                 });
@@ -1950,7 +1967,7 @@
                              appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
                              generateRecurringTransactions(true);
                              saveAppState();
-                             renderHomePage();
+                             updateUI();
                              closeModal();
                              showToast('Transação recorrente excluída!');
                          });
@@ -1964,35 +1981,28 @@
                 const activeListContainer = document.getElementById('recurring-list-active');
                 const archivedListContainer = document.getElementById('recurring-list-archived');
                 
-                const activeTxs = appState.recurringTransactions.filter(tx => !tx.archived);
-                const archivedTxs = appState.recurringTransactions.filter(tx => tx.archived);
+                const activeTxs = appState.recurringTransactions || [];
+                const archivedTxs = appState.archivedRecurringTransactions || [];
 
-                activeListContainer.innerHTML = activeTxs.length > 0 ? activeTxs.map(tx => renderRecurringTxItem(tx)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação recorrente ativa.</p>';
-                archivedListContainer.innerHTML = archivedTxs.length > 0 ? archivedTxs.map(tx => renderRecurringTxItem(tx, true)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação arquivada.</p>';
-
-                document.getElementById('active-tx-tab').classList.toggle('active', view === 'active');
-                document.getElementById('archived-tx-tab').classList.toggle('active', view === 'archived');
+                activeListContainer.innerHTML = activeTxs.length > 0 ? activeTxs.map(tx => renderRecurringItem(tx)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação recorrente ativa.</p>';
+                archivedListContainer.innerHTML = archivedTxs.length > 0 ? archivedTxs.map(tx => renderRecurringItem(tx, true)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação arquivada.</p>';
+                
+                document.getElementById('active-recurring-tab').classList.toggle('active', view === 'active');
+                document.getElementById('archived-recurring-tab').classList.toggle('active', view === 'archived');
                 activeListContainer.classList.toggle('hidden', view !== 'active');
-                archivedListContainer.classList.toggle('hidden', view === 'active');
+                archivedListContainer.classList.toggle('hidden', view !== 'archived');
             };
 
-            const renderRecurringTxItem = (tx, isArchived = false) => {
+            const renderRecurringItem = (tx, isArchived = false) => {
                 const isGasto = tx.type === 'gasto';
-                const actionButton = isArchived 
-                    ? `<button class="unarchive-recurring-btn text-blue-400 hover:text-blue-300" data-tx-id="${tx.id}"><i class="fas fa-undo"></i></button>`
-                    : `<button class="edit-recurring-item text-slate-400 hover:text-white" data-tx-id="${tx.id}"><i class="fas fa-pencil-alt"></i></button>`;
-
                 return `
-                    <div class="flex justify-between items-center bg-slate-700 p-3 rounded-lg">
+                    <button class="${isArchived ? 'unarchive-recurring-item' : 'edit-recurring-item'} w-full flex justify-between items-center bg-slate-700 p-3 rounded-lg hover:bg-slate-600" data-tx-id="${tx.id}">
                         <div>
                             <p class="font-semibold text-white">${tx.description}</p>
                             <p class="text-sm text-slate-400">Todo dia ${tx.dayOfMonth} &bull; ${tx.durationMonths > 0 ? `${tx.durationMonths} meses` : 'Indefinido'}</p>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <p class="font-semibold ${isGasto ? 'text-red-400' : 'text-green-400'}">${formatCurrency(tx.amount)}</p>
-                            ${actionButton}
-                        </div>
-                    </div>
+                        <p class="font-semibold ${isGasto ? 'text-red-400' : 'text-green-400'}">${formatCurrency(tx.amount)}</p>
+                    </button>
                 `;
             };
 
@@ -2002,42 +2012,50 @@
                         <h2 class="text-xl font-bold text-white">Transações Recorrentes</h2>
                         <button id="add-new-recurring-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm"><i class="fas fa-plus mr-2"></i>Nova</button>
                     </div>
-                    <div class="bg-slate-800 p-1 rounded-lg flex justify-center gap-1 mb-4">
-                        <button id="active-tx-tab" class="view-btn flex-1 py-2 px-4 rounded-md text-sm font-semibold active">Ativas</button>
-                        <button id="archived-tx-tab" class="view-btn flex-1 py-2 px-4 rounded-md text-sm font-semibold">Arquivadas</button>
+                    <div class="bg-slate-900 p-1 rounded-lg flex mb-4">
+                        <button id="active-recurring-tab" class="recurring-tab-btn flex-1 py-2 rounded-md">Ativas</button>
+                        <button id="archived-recurring-tab" class="recurring-tab-btn flex-1 py-2 rounded-md">Arquivadas</button>
                     </div>
-                    <div id="recurring-list-active" class="space-y-2 max-h-64 overflow-y-auto pr-2"></div>
-                    <div id="recurring-list-archived" class="space-y-2 max-h-64 overflow-y-auto pr-2 hidden"></div>
+                    <div id="recurring-list-active" class="space-y-2 max-h-80 overflow-y-auto pr-2"></div>
+                    <div id="recurring-list-archived" class="space-y-2 max-h-80 overflow-y-auto pr-2 hidden"></div>
                     <div class="flex justify-end mt-6">
                         <button type="button" class="cancel-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg">Fechar</button>
                     </div>
                 </div>
             `;
             openModal(modalHTML, () => {
-                renderLists();
-                document.getElementById('active-tx-tab').addEventListener('click', () => renderLists('active'));
-                document.getElementById('archived-tx-tab').addEventListener('click', () => renderLists('archived'));
-                document.getElementById('add-new-recurring-btn').addEventListener('click', () => setupRecurringTxModal());
-                
-                document.getElementById('modal-backdrop').addEventListener('click', e => {
-                    const editTarget = e.target.closest('.edit-recurring-item');
-                    if (editTarget) {
-                        setupRecurringTxModal(editTarget.dataset.txId);
+                archiveCompletedRecurringTransactions(); // Run check when opening
+                renderLists('active');
+
+                document.getElementById('active-recurring-tab').addEventListener('click', () => renderLists('active'));
+                document.getElementById('archived-recurring-tab').addEventListener('click', () => renderLists('archived'));
+
+                document.getElementById('recurring-list-active').addEventListener('click', e => {
+                    const target = e.target.closest('.edit-recurring-item');
+                    if (target) {
+                        setupRecurringTxModal(target.dataset.txId);
                     }
-                    const unarchiveTarget = e.target.closest('.unarchive-recurring-btn');
-                    if(unarchiveTarget) {
-                        const tx = appState.recurringTransactions.find(t => t.id === unarchiveTarget.dataset.txId);
-                        if(tx) {
-                            tx.archived = false;
+                });
+                
+                document.getElementById('recurring-list-archived').addEventListener('click', e => {
+                    const target = e.target.closest('.unarchive-recurring-item');
+                    if (target) {
+                        const txId = target.dataset.txId;
+                        const txIndex = appState.archivedRecurringTransactions.findIndex(t => t.id === txId);
+                        if (txIndex > -1) {
+                            const [txToUnarchive] = appState.archivedRecurringTransactions.splice(txIndex, 1);
+                            appState.recurringTransactions.push(txToUnarchive);
                             saveAppState();
                             renderLists('archived');
                             showToast('Transação desarquivada!');
                         }
                     }
                 });
+
+                document.getElementById('add-new-recurring-btn').addEventListener('click', () => setupRecurringTxModal());
             });
         }
-        
+
         // ===============================================
         // F. BACKUP MANUAL, AUTH MODAL & CSV
         // ===============================================
@@ -2315,7 +2333,7 @@
                     });
                     
                     saveAppState();
-                    renderHomePage();
+                    updateUI();
                     closeModal();
                     showToast(`${addedCount} transações importadas.`);
                 } catch(error) {
@@ -2546,14 +2564,6 @@
         // ===============================================
         
         document.body.addEventListener('click', e => {
-            // Botões de login inicial
-            if (e.target.closest('#anonymous-login-btn')) {
-                signInAnonymously(auth).catch(error => console.error("Erro no login anônimo:", error));
-            }
-            if (e.target.closest('#go-to-login-btn')) {
-                setupAuthModal();
-            }
-
             if (e.target.closest('.nav-item')) navigateTo(e.target.closest('.nav-item').dataset.page);
             if (e.target.closest('#nav-add-transaction-btn')) setupTransactionModal();
             if (e.target.closest('#settingsButton')) setupSettingsModal();
@@ -2634,8 +2644,7 @@
                 viewBtn.classList.add('active');
                 appState[`${context}View`].viewMode = viewBtn.dataset.view;
                 saveAppState();
-                if(context === 'home') renderHomePage();
-                else if (context === 'cards') renderCardsPage();
+                updateUI();
             }
 
             const dateNavBtn = e.target.closest('.date-nav-btn');
@@ -2662,13 +2671,13 @@
                 stateObject[dateKey] = newDate.toISOString();
                 saveAppState();
 
-                // CORREÇÃO DO BUG: Chamar a função de renderização específica do contexto
+                // CORREÇÃO DO BUG DE NAVEGAÇÃO
                 if (context === 'planning') {
                     renderPlanningPage();
                 } else if (context === 'cards') {
-                    renderCardsPage();
+                    renderCardsPage(); // Apenas renderiza a página de cartões
                 } else {
-                    renderHomePage();
+                    updateUI(); // Comportamento padrão para a home
                 }
             }
             
@@ -2684,13 +2693,16 @@
             if (e.target.id === 'modal-backdrop' || e.target.closest('.cancel-btn')) closeModal();
 
             if (e.target.closest('.pay-invoice-btn')) {
-                const { cardId, invoiceDate } = e.target.closest('.pay-invoice-btn').dataset;
+                const cardId = e.target.closest('.pay-invoice-btn').dataset.cardId;
+                const invoiceDate = e.target.closest('.pay-invoice-btn').dataset.invoiceDate;
                 setupPayInvoiceModal(cardId, invoiceDate);
             }
-            // NOVO: Handler para o botão de ajuste de fatura
+            
+            // NOVO: Gatilho para o modal de ajuste
             if (e.target.closest('.adjust-invoice-btn')) {
-                const { cardId, invoiceDate } = e.target.closest('.adjust-invoice-btn').dataset;
-                setupAdjustInvoiceModal(cardId, invoiceDate);
+                const cardId = e.target.closest('.adjust-invoice-btn').dataset.cardId;
+                const invoiceDate = e.target.closest('.adjust-invoice-btn').dataset.invoiceDate;
+                setupInvoiceAdjustModal(cardId, invoiceDate);
             }
             
             // Handlers para o modal de backup manual
@@ -2767,7 +2779,7 @@
                         }
                         appState.transactions[txIndex] = { ...appState.transactions[txIndex], amount: amountInCents, description, ...txPayload };
                         saveAppState();
-                        renderHomePage(); closeModal(); showToast('Transação atualizada!');
+                        updateUI(); closeModal(); showToast('Transação atualizada!');
                     }
                 } else {
                     const installmentsInput = document.getElementById('installments');
@@ -2789,7 +2801,7 @@
                         appState.transactions.push({ id: `tx${Date.now()}`, amount: amountInCents, description, ...txPayload, isInstallment: false });
                     }
                     saveAppState();
-                    renderHomePage(); closeModal(); showToast('Transação salva!');
+                    updateUI(); closeModal(); showToast('Transação salva!');
                 }
             }
             else if (e.target.id === 'categoryForm') {
@@ -2805,7 +2817,7 @@
                     appState.categories.push({ name, ...payload });
                 }
                 saveAppState();
-                renderHomePage(); closeModal(); showToast('Categoria salva!');
+                updateUI(); closeModal(); showToast('Categoria salva!');
             }
             else if (e.target.id === 'cardForm') {
                  const name = document.getElementById('cardName').value.trim();
@@ -2819,7 +2831,7 @@
                      appState.cards.push({ id: `c${Date.now()}`, name, ...payload });
                  }
                  saveAppState();
-                 renderCardsPage(); closeModal(); showToast('Cartão salvo!');
+                 updateUI(); closeModal(); showToast('Cartão salvo!');
             }
             else if (e.target.id === 'payInvoiceForm') {
                 const cardId = e.target.dataset.cardId;
@@ -2836,8 +2848,50 @@
                         paidCardId: cardId, invoiceDueDate: dueDate.toISOString() 
                     });
                     saveAppState();
-                    renderCardsPage(); closeModal(); showToast('Pagamento registrado!');
+                    updateUI(); closeModal(); showToast('Pagamento registrado!');
                 } else { showToast('Valor de pagamento inválido.', 'error'); }
+            }
+            // NOVO: Handler para o formulário de ajuste de fatura
+            else if (e.target.id === 'adjustInvoiceForm') {
+                const { cardId, invoiceDate, currentTotal } = e.target.dataset;
+                const finalAmount = parseCurrency(document.getElementById('finalAmount').value);
+                const difference = finalAmount - parseInt(currentTotal);
+                
+                if (difference !== 0) {
+                    const card = appState.cards.find(c => c.id === cardId);
+                    const { dueDate } = getInvoiceDates(card, new Date(invoiceDate));
+                    const adjustmentId = `adj-${cardId}-${dueDate.toISOString().slice(0, 10)}`;
+
+                    // Remove o ajuste anterior, se houver
+                    appState.transactions = appState.transactions.filter(tx => tx.id !== adjustmentId);
+
+                    const newAdjustment = {
+                        id: adjustmentId,
+                        amount: Math.abs(difference),
+                        description: `Ajuste de Fatura ${card.name}`,
+                        date: toISODate(dueDate),
+                        type: 'gasto', // Sempre um gasto, o valor pode ser negativo no cálculo
+                        category: 'Ajustes',
+                        source: cardId,
+                        isVirtual: true,
+                        effectiveDate: dueDate.toISOString()
+                    };
+                    
+                    // Se o valor final for menor, o ajuste é um "ganho" virtual (crédito)
+                    if (difference < 0) {
+                        newAdjustment.type = 'ganho';
+                        newAdjustment.description = `Crédito de Ajuste Fatura ${card.name}`;
+                    }
+
+                    appState.transactions.push(newAdjustment);
+                    saveAppState();
+                    renderCardsPage();
+                    closeModal();
+                    showToast('Fatura ajustada com sucesso!');
+                } else {
+                    showToast('Nenhum ajuste necessário.', 'info');
+                    closeModal();
+                }
             }
             else if (e.target.id === 'planningCategoryForm') {
                 const categoryName = document.getElementById('planningCategoryName').value;
@@ -2879,7 +2933,7 @@
 
                 if (transactionsAdded > 0) {
                     saveAppState();
-                    renderHomePage();
+                    updateUI();
                     showToast(`${transactionsAdded} transação(ões) adicionadas com sucesso!`);
                 } else {
                     showToast('Nenhuma transação foi adicionada.', 'info');
@@ -2892,7 +2946,7 @@
                 const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
                 appState.balanceOverrides[monthKey] = newBalance;
                 saveAppState();
-                renderHomePage();
+                updateUI();
                 closeModal();
                 showToast('Saldo ajustado com sucesso!');
             }
@@ -2909,8 +2963,7 @@
                     source: document.getElementById('recurringSource').value,
                     dayOfMonth: dayOfMonth,
                     durationMonths: parseInt(document.getElementById('recurringDuration').value) || 0,
-                    startDate: startDate,
-                    archived: false // Sempre começa como não-arquivado
+                    startDate: startDate
                 };
 
                 if (!payload.description || payload.amount <= 0) {
@@ -2929,7 +2982,7 @@
                 
                 generateRecurringTransactions(true);
                 saveAppState();
-                renderHomePage();
+                updateUI();
                 closeModal();
                 showToast('Transação recorrente salva!');
             }
@@ -2944,8 +2997,7 @@
                 const [year, month, day] = dateValue.split('-');
                 appState[viewKey][key] = new Date(Date.UTC(year, month - 1, day)).toISOString();
                 saveAppState();
-                if(context === 'home') renderHomePage();
-                else if (context === 'cards') renderCardsPage();
+                updateUI();
             }
             if (e.target.closest('#default-payment')) {
                 appState.settings.defaultPaymentSource = e.target.value;
@@ -2971,17 +3023,26 @@
             const currentUser = auth.currentUser;
 
             if (!currentUser || !currentUser.isAnonymous) {
-                showToast("Erro: Nenhum usuário anônimo para vincular.", "error");
+                // Se não houver usuário anônimo, cria uma nova conta do zero
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    showToast("Conta criada com sucesso!", "success");
+                    closeModal();
+                } catch (error) {
+                    console.error("Erro ao criar conta:", error);
+                    showToast(`Erro: ${error.message}`, "error");
+                }
                 return;
             }
 
+            // Se houver um usuário anônimo, vincula os dados
             try {
                 const credential = EmailAuthProvider.credential(email, password);
                 await linkWithCredential(currentUser, credential);
                 showToast("Conta criada e dados vinculados com sucesso!", "success");
                 closeModal();
             } catch (error) {
-                console.error("Erro ao criar conta:", error);
+                console.error("Erro ao vincular conta:", error);
                 showToast(`Erro: ${error.message}`, "error");
             }
         }
@@ -3003,8 +3064,12 @@
 
         async function handleSignOut() {
             try {
+                if (unsubscribeFromFirestore) {
+                    unsubscribeFromFirestore();
+                    unsubscribeFromFirestore = null;
+                }
                 await signOut(auth);
-                // O onAuthStateChanged vai lidar com a exibição da tela de escolha
+                // O onAuthStateChanged vai redirecionar para a tela de boas-vindas
                 showToast("Você saiu da sua conta.", "success");
                 closeModal();
             } catch (error) {
@@ -3019,8 +3084,6 @@
 
         function initializeUI() {
             if (!appState || !appState.settings) return;
-            archiveCompletedRecurringTxs(); // NOVO: Arquiva recorrências concluídas
-            generateRecurringTransactions();
             applyNavPosition();
             navigateTo('home');
             updateUndoRedoButtons();
@@ -3037,8 +3100,6 @@
             }
 
             appState.recurringTransactions.forEach(model => {
-                if(model.archived) return; // NOVO: Não gera transações arquivadas
-
                 let startDate = new Date(model.startDate + 'T12:00:00Z');
                 let currentDate = new Date(startDate);
                 currentDate.setUTCDate(model.dayOfMonth);
@@ -3081,28 +3142,34 @@
                 }
             });
         }
-
-        // NOVO: Função para arquivar recorrências concluídas
-        function archiveCompletedRecurringTxs() {
+        
+        // NOVO: Função para arquivar transações recorrentes concluídas
+        function archiveCompletedRecurringTransactions() {
             const today = new Date();
-            today.setUTCHours(0,0,0,0);
-            let changed = false;
+            today.setUTCHours(0, 0, 0, 0);
+            
+            const transactionsToArchive = [];
+            const activeTransactions = [];
 
-            appState.recurringTransactions.forEach(tx => {
-                if(tx.durationMonths && tx.durationMonths > 0 && !tx.archived) {
+            (appState.recurringTransactions || []).forEach(tx => {
+                if (tx.durationMonths > 0) {
                     const startDate = new Date(tx.startDate + 'T12:00:00Z');
                     const endDate = new Date(startDate);
                     endDate.setUTCMonth(endDate.getUTCMonth() + tx.durationMonths);
-
-                    if(today > endDate) {
-                        tx.archived = true;
-                        changed = true;
+                    
+                    if (endDate < today) {
+                        transactionsToArchive.push(tx);
+                    } else {
+                        activeTransactions.push(tx);
                     }
+                } else {
+                    activeTransactions.push(tx);
                 }
             });
 
-            if(changed) {
-                console.log("Transações recorrentes concluídas foram arquivadas.");
+            if (transactionsToArchive.length > 0) {
+                appState.recurringTransactions = activeTransactions;
+                appState.archivedRecurringTransactions = [...(appState.archivedRecurringTransactions || []), ...transactionsToArchive];
                 saveAppState();
             }
         }
@@ -3125,13 +3192,14 @@
                     { name: 'Viagem', icon: 'fas fa-plane', color: '#0ea5e9', budget: null },
                     { name: 'Serviços', icon: 'fas fa-concierge-bell', color: '#14b8a6', budget: null },
                     { name: 'Pagamentos', icon: 'fas fa-money-check-alt', color: '#10b981', budget: null },
+                    { name: 'Ajustes', icon: 'fas fa-magic', color: '#facc15', budget: null },
                     { name: 'Outros', icon: 'fas fa-ellipsis-h', color: '#6b7280', budget: null }
                 ],
                 planning: {},
                 chatHistory: [],
                 recurringTransactions: [],
+                archivedRecurringTransactions: [],
                 balanceOverrides: {},
-                invoiceOverrides: {}, // NOVO
                 homeView: { viewMode: 'monthly', date: new Date().toISOString(), customStart: new Date().toISOString(), customEnd: new Date().toISOString() },
                 cardsView: { viewMode: 'monthly', date: new Date().toISOString() },
                 planningView: { viewMode: 'monthly', date: new Date().toISOString() },
@@ -3143,6 +3211,20 @@
         // Inicia a conexão com o Firebase quando o DOM estiver pronto
         document.addEventListener('DOMContentLoaded', () => {
             initFirebase();
+            
+            // Adiciona listeners para a nova tela de boas-vindas
+            document.getElementById('login-or-signup-btn').addEventListener('click', () => {
+                setupAuthModal();
+            });
+            document.getElementById('anonymous-login-btn').addEventListener('click', () => {
+                document.getElementById('loading-overlay').style.display = 'flex';
+                document.getElementById('loading-message').textContent = 'Entrando...';
+                signInAnonymously(auth).catch(error => {
+                    console.error("Erro no login anônimo:", error);
+                    showToast("Não foi possível entrar anonimamente.", "error");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                });
+            });
         });
     </script>
 </body>
