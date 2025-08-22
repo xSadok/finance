@@ -459,7 +459,7 @@
         // ===============================================
         // A. STATE, CONFIG & FIREBASE SETUP
         // ===============================================
-        const APP_VERSION = 4.0; // Versão com novo fluxo de login e funcionalidades
+        const APP_VERSION = 4.1; // Versão com correção de bug de navegação
 
         // =======================================================================
         // PLACEHOLDERS PARA GITHUB ACTIONS - NÃO EDITE DIRETAMENTE
@@ -479,6 +479,7 @@
         let firebaseApp, auth, db, userId;
         let unsubscribeFromFirestore = null; // Função para parar de ouvir o banco de dados
         let appState = {};
+        let isInitialLoad = true; // CORREÇÃO: Flag para rastrear o primeiro carregamento de dados
         
         // Histórico para Undo/Redo (agora apenas local)
         let history = [];
@@ -517,6 +518,7 @@
                     } else {
                         // Usuário não está logado, exibe a tela de boas-vindas
                         console.log("Nenhum usuário logado. Exibindo tela de boas-vindas.");
+                        isInitialLoad = true; // CORREÇÃO: Reseta a flag ao deslogar
                         document.getElementById('loading-overlay').style.display = 'none';
                         document.getElementById('welcome-screen').style.display = 'flex';
                         document.getElementById('main-content').classList.add('hidden');
@@ -550,7 +552,7 @@
             }
         }
 
-        // Configura o listener que atualiza o app em tempo real
+        // CORREÇÃO: Lógica do listener foi refeita para evitar re-navegação
         function setupRealtimeListener(uid) {
             const userDocRef = doc(db, "users", uid);
             
@@ -560,36 +562,56 @@
 
             unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
                 isProcessingUpdate = true;
+                let needsSave = false;
+
                 if (docSnap.exists()) {
                     console.log("Dados recebidos do Firestore.");
                     appState = docSnap.data();
                     
                     // Garantir que novas propriedades do estado existam
-                    if (!appState.chatHistory) appState.chatHistory = [];
-                    if (!appState.recurringTransactions) appState.recurringTransactions = [];
-                    if (!appState.archivedRecurringTransactions) appState.archivedRecurringTransactions = [];
-                    if (!appState.balanceOverrides) appState.balanceOverrides = {};
-                    if (!appState.settings) appState.settings = getInitialState().settings;
+                    if (!appState.chatHistory) { appState.chatHistory = []; needsSave = true; }
+                    if (!appState.recurringTransactions) { appState.recurringTransactions = []; needsSave = true; }
+                    if (!appState.archivedRecurringTransactions) { appState.archivedRecurringTransactions = []; needsSave = true; }
+                    if (!appState.balanceOverrides) { appState.balanceOverrides = {}; needsSave = true; }
+                    if (!appState.settings) { appState.settings = getInitialState().settings; needsSave = true; }
+                    
+                    // Se o estado foi migrado, salva de volta no Firestore
+                    if(needsSave) saveAppStateToFirestore();
 
-                    initializeUI();
                 } else {
                     console.log("Nenhum dado encontrado. Criando estado inicial.");
                     appState = getInitialState();
-                    saveAppStateToFirestore();
-                    initializeUI();
+                    saveAppStateToFirestore(); // Salva o estado inicial para o novo usuário
                 }
 
-                history = [JSON.parse(JSON.stringify(appState))];
-                historyIndex = 0;
-                updateUndoRedoButtons();
-                
-                // Exibe o conteúdo principal do app
-                document.getElementById('main-content').classList.remove('hidden');
-                document.getElementById('main-nav').classList.remove('hidden');
-                document.getElementById('loading-overlay').style.opacity = '0';
-                setTimeout(() => {
-                    document.getElementById('loading-overlay').style.display = 'none';
-                }, 300);
+                if (isInitialLoad) {
+                    // No primeiro carregamento, inicializa a UI completa
+                    initializeUI();
+                    history = [JSON.parse(JSON.stringify(appState))];
+                    historyIndex = 0;
+                    updateUndoRedoButtons();
+                    
+                    // Exibe o conteúdo principal do app
+                    document.getElementById('main-content').classList.remove('hidden');
+                    document.getElementById('main-nav').classList.remove('hidden');
+                    document.getElementById('loading-overlay').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('loading-overlay').style.display = 'none';
+                    }, 300);
+                    
+                    isInitialLoad = false; // Marca que o carregamento inicial foi concluído
+                } else {
+                    // Em atualizações subsequentes, apenas renderiza a página ativa
+                    const activePage = document.querySelector('.nav-item.active')?.dataset.page || 'home';
+                    console.log(`Dados atualizados. Re-renderizando a página ativa: ${activePage}`);
+                    switch(activePage) {
+                        case 'home': updateUI(); break;
+                        case 'cards': renderCardsPage(); break;
+                        case 'planning': renderPlanningPage(); break;
+                        case 'chat': renderChatPage(); break;
+                        default: updateUI(); // Fallback para a home
+                    }
+                }
                 
                 isProcessingUpdate = false;
             }, (error) => {
@@ -640,7 +662,7 @@
             isProcessingUpdate = true;
             appState = JSON.parse(JSON.stringify(history[historyIndex]));
             saveAppStateToFirestore();
-            initializeUI();
+            // A UI será atualizada pelo onSnapshot listener, não precisa chamar initializeUI() aqui
             updateUndoRedoButtons();
             setTimeout(() => { isProcessingUpdate = false; }, 500);
         }
@@ -1949,11 +1971,11 @@
                  const gastoFields = document.getElementById('recurring-gasto-fields');
 
                  const updateTypeButtons = () => {
-                     gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
-                     gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
-                     ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
-                     ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
-                     gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
+                      gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
+                      gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
+                      ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
+                      ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
+                      gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
                  };
 
                  gastoBtn.addEventListener('click', () => { typeInput.value = 'gasto'; updateTypeButtons(); });
@@ -1962,16 +1984,16 @@
                  updateTypeButtons();
 
                  if(isEditing) {
-                     document.getElementById('delete-recurring-btn').addEventListener('click', () => {
-                         setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
-                             appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
-                             generateRecurringTransactions(true);
-                             saveAppState();
-                             updateUI();
-                             closeModal();
-                             showToast('Transação recorrente excluída!');
-                         });
-                     });
+                      document.getElementById('delete-recurring-btn').addEventListener('click', () => {
+                           setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
+                                appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
+                                generateRecurringTransactions(true);
+                                saveAppState();
+                                updateUI();
+                                closeModal();
+                                showToast('Transação recorrente excluída!');
+                           });
+                      });
                  }
             });
         }
@@ -2669,16 +2691,7 @@
                 }
                 
                 stateObject[dateKey] = newDate.toISOString();
-                saveAppState();
-
-                // CORREÇÃO DO BUG DE NAVEGAÇÃO
-                if (context === 'planning') {
-                    renderPlanningPage();
-                } else if (context === 'cards') {
-                    renderCardsPage(); // Apenas renderiza a página de cartões
-                } else {
-                    updateUI(); // Comportamento padrão para a home
-                }
+                saveAppState(); // Apenas salva o estado. O onSnapshot vai cuidar da renderização.
             }
             
             const navPosBtn = e.target.closest('.nav-pos-btn');
@@ -2825,10 +2838,10 @@
                  const editingId = e.target.dataset.editingId;
                  const payload = { limit: parseCurrency(document.getElementById('cardLimit').value), dueDate: parseInt(document.getElementById('cardDueDate').value) || 10, closingDate: parseInt(document.getElementById('cardClosingDate').value) || 7, color: document.getElementById('cardColor').value, brand: document.getElementById('cardBrand').value };
                  if (editingId) {
-                     const card = appState.cards.find(c => c.id === editingId);
-                     if (card) Object.assign(card, { name, ...payload });
+                      const card = appState.cards.find(c => c.id === editingId);
+                      if (card) Object.assign(card, { name, ...payload });
                  } else {
-                     appState.cards.push({ id: `c${Date.now()}`, name, ...payload });
+                      appState.cards.push({ id: `c${Date.now()}`, name, ...payload });
                  }
                  saveAppState();
                  updateUI(); closeModal(); showToast('Cartão salvo!');
