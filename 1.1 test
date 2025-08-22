@@ -264,10 +264,10 @@
         }
         
         /* Overlay de Carregamento */
-        #loading-overlay {
+        #loading-overlay, #auth-choice-overlay {
             position: fixed;
             inset: 0;
-            background-color: rgba(15, 23, 42, 0.8);
+            background-color: rgba(15, 23, 42, 0.95);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -296,6 +296,25 @@
     </style>
 </head>
 <body class="bg-slate-900 text-slate-300 antialiased">
+
+    <!-- Overlay de Escolha de Autenticação -->
+    <div id="auth-choice-overlay" class="hidden">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-white mb-2">Bem-vindo(a)</h1>
+            <p class="text-slate-400 mb-8">Como você deseja começar?</p>
+            <div class="space-y-4">
+                <button id="anonymous-login-btn" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                    Entrar Anonimamente
+                </button>
+                <button id="go-to-login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                    Fazer Login ou Criar Conta
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 mt-6 max-w-xs mx-auto">
+                Acesso anônimo salva os dados apenas neste navegador. Crie uma conta para acessar de qualquer lugar.
+            </p>
+        </div>
+    </div>
 
     <!-- Overlay de Carregamento -->
     <div id="loading-overlay">
@@ -429,7 +448,7 @@
         // ===============================================
         // A. STATE, CONFIG & FIREBASE SETUP
         // ===============================================
-        const APP_VERSION = 3.2; // Versão com sistema de login
+        const APP_VERSION = 3.3; // Versão com fluxo de login e ajustes
 
         // =======================================================================
         // PLACEHOLDERS PARA GITHUB ACTIONS - NÃO EDITE DIRETAMENTE
@@ -481,13 +500,14 @@
                         // Usuário está logado (anonimamente ou não)
                         userId = user.uid;
                         console.log("Usuário autenticado com ID:", userId);
+                        document.getElementById('auth-choice-overlay').classList.add('hidden');
+                        document.getElementById('loading-overlay').style.display = 'flex';
                         setupRealtimeListener(userId); // Começa a ouvir os dados do usuário
                     } else {
-                        // Usuário não está logado, tenta fazer login anônimo
-                        console.log("Nenhum usuário. Tentando login anônimo...");
-                        signInAnonymously(auth).catch(error => {
-                            console.error("Erro no login anônimo:", error);
-                        });
+                        // Usuário não está logado, mostra tela de escolha
+                        console.log("Nenhum usuário. Mostrando tela de escolha.");
+                        document.getElementById('loading-overlay').style.display = 'none';
+                        document.getElementById('auth-choice-overlay').classList.remove('hidden');
                     }
                 });
             } catch (error) {
@@ -530,9 +550,11 @@
                     console.log("Dados recebidos do Firestore.");
                     appState = docSnap.data();
                     
+                    // Garantir que novas propriedades do estado existam
                     if (!appState.chatHistory) appState.chatHistory = [];
                     if (!appState.recurringTransactions) appState.recurringTransactions = [];
                     if (!appState.balanceOverrides) appState.balanceOverrides = {};
+                    if (!appState.invoiceOverrides) appState.invoiceOverrides = {}; // NOVO: Para ajuste de fatura
                     if (!appState.settings) appState.settings = getInitialState().settings;
 
                     initializeUI();
@@ -841,16 +863,30 @@
             const invoiceTotal = invoiceTransactions.reduce((sum, t) => sum + t.amount, 0);
             const invoicePaid = invoicePayments.reduce((sum, t) => sum + t.amount, 0);
 
+            // NOVO: Lógica de ajuste de fatura
+            const monthKey = `${targetDueDate.getUTCFullYear()}-${String(targetDueDate.getUTCMonth() + 1).padStart(2, '0')}`;
+            const invoiceOverrideKey = `${card.id}-${monthKey}`;
+            const adjustedTotal = appState.invoiceOverrides[invoiceOverrideKey];
+            const finalTotal = adjustedTotal !== undefined ? adjustedTotal : invoiceTotal;
+            const adjustmentAmount = adjustedTotal !== undefined ? adjustedTotal - invoiceTotal : 0;
+
             let status = 'Aberta';
             if (today > closeDate) {
-                 status = (invoiceTotal > 0 && (invoiceTotal - invoicePaid) < 1) ? 'Paga' : 'Fechada';
+                 status = (finalTotal > 0 && (finalTotal - invoicePaid) < 1) ? 'Paga' : 'Fechada';
             }
-            if ((invoiceTotal > 0) && (invoiceTotal - invoicePaid) < 1) {
+            if ((finalTotal > 0) && (finalTotal - invoicePaid) < 1) {
                 status = 'Paga';
             }
 
             return {
-                invoice: { transactions: invoiceTransactions, payments: invoicePayments, total: invoiceTotal, paid: invoicePaid },
+                invoice: { 
+                    transactions: invoiceTransactions, 
+                    payments: invoicePayments, 
+                    total: invoiceTotal, 
+                    paid: invoicePaid,
+                    adjustedTotal: finalTotal, // NOVO
+                    adjustmentAmount: adjustmentAmount // NOVO
+                },
                 status,
                 dueDate: targetDueDate
             };
@@ -878,7 +914,14 @@
 
             const invoiceTotal = invoiceTransactions.reduce((sum, t) => sum + t.amount, 0);
             const paidForThisInvoice = invoicePayments.reduce((sum, t) => sum + t.amount, 0);
-            const currentInvoiceValue = invoiceTotal - paidForThisInvoice;
+            
+            // NOVO: Aplicar ajuste de fatura no resumo
+            const monthKey = `${dueDate.getUTCFullYear()}-${String(dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
+            const invoiceOverrideKey = `${card.id}-${monthKey}`;
+            const adjustedTotal = appState.invoiceOverrides[invoiceOverrideKey];
+            const finalTotal = adjustedTotal !== undefined ? adjustedTotal : invoiceTotal;
+            
+            const currentInvoiceValue = finalTotal - paidForThisInvoice;
 
             return { total, currentInvoiceValue, dueDate };
         }
@@ -894,19 +937,19 @@
             document.querySelector(`.nav-item[data-page="${pageId}"]`).classList.add('active');
             if (pageId !== 'cards') appState.ui.selectedCardId = null;
             
-            if (pageId === 'home' || pageId === 'cards') updateUI();
+            if (pageId === 'home') renderHomePage();
+            else if (pageId === 'cards') renderCardsPage();
             else if (pageId === 'planning') renderPlanningPage();
             else if (pageId === 'chat') renderChatPage();
         }
 
-        function updateUI() {
-            if (!appState || !appState.homeView) return; // Proteção contra renderização prematura
+        function renderHomePage() {
+            if (!appState || !appState.homeView) return;
             renderDateNavigator('home');
             const homeTransactions = getFilteredTransactions('home', getTransactionEffectiveDate);
             renderSummary(homeTransactions);
             renderCategories();
             renderTransactions(homeTransactions);
-            renderCardsPage();
         }
 
         function updateAuthUI(user) {
@@ -1121,9 +1164,16 @@
 
             const { invoice, status, dueDate } = getInvoiceDetails(card, appState.ui.selectedInvoiceDate);
             const statusColor = status === 'Paga' ? 'text-green-400' : (status === 'Fechada' ? 'text-red-400' : 'text-yellow-400');
-            const remainingValue = invoice.total - invoice.paid;
+            const remainingValue = invoice.adjustedTotal - invoice.paid;
             const allInvoiceItems = [...invoice.transactions.map(tx => ({ ...tx, itemType: 'expense' })), ...invoice.payments.map(tx => ({ ...tx, itemType: 'payment' }))];
             
+            let adjustmentHTML = '';
+            if (invoice.adjustmentAmount !== 0) {
+                const adjColor = invoice.adjustmentAmount > 0 ? 'text-red-400' : 'text-green-400';
+                const adjSign = invoice.adjustmentAmount > 0 ? '+' : '';
+                adjustmentHTML = `<p class="text-xs ${adjColor}">Original ${formatCurrency(invoice.total)} (${adjSign}${formatCurrency(invoice.adjustmentAmount)})</p>`;
+            }
+
             let transactionsHTML = '<div class="p-4 text-sm text-slate-400">Nenhuma movimentação nesta fatura.</div>';
             if (allInvoiceItems.length > 0) {
                 transactionsHTML = allInvoiceItems.sort((a, b) => new Date(b.date) - new Date(a.date)).map(item => {
@@ -1136,7 +1186,7 @@
                     }
                 }).join('');
             }
-            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.total)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p>${status !== 'Paga' ? `<button class="pay-invoice-btn mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}</div></div></div><div>${transactionsHTML}</div></div>`;
+            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.adjustedTotal)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}${adjustmentHTML}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p><div class="flex gap-2 mt-2"><button class="adjust-invoice-btn bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}"><i class="fas fa-sliders-h"></i></button>${status !== 'Paga' ? `<button class="pay-invoice-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}</div></div></div></div><div>${transactionsHTML}</div></div>`;
         }
 
         function renderPlanningPage() {
@@ -1318,7 +1368,7 @@
                                 appState.transactions = appState.transactions.filter(t => t.id !== tx.id);
                             }
                             saveAppState();
-                            closeModal(); updateUI(); showToast('Transação excluída!');
+                            closeModal(); renderHomePage(); showToast('Transação excluída!');
                         });
                     });
                 }
@@ -1351,7 +1401,7 @@
                             appState.categories = appState.categories.filter(c => c.name !== categoryName);
                             appState.transactions.forEach(t => { if (t.category === categoryName) t.category = 'Outros'; });
                             saveAppState();
-                            closeModal(); updateUI(); showToast('Categoria excluída!');
+                            closeModal(); renderHomePage(); showToast('Categoria excluída!');
                         });
                     });
                 }
@@ -1394,7 +1444,7 @@
                             appState.transactions = appState.transactions.filter(t => t.source !== cardId);
                             appState.cards = appState.cards.filter(c => c.id !== cardId);
                             saveAppState();
-                            closeModal(); updateUI(); showToast('Cartão excluído!');
+                            closeModal(); renderCardsPage(); showToast('Cartão excluído!');
                         });
                     });
                 }
@@ -1548,7 +1598,7 @@
 
                 document.querySelector('#modal-backdrop .cancel-btn').addEventListener('click', () => {
                     saveAppState();
-                    updateUI();
+                    renderHomePage();
                 });
             });
         }
@@ -1569,7 +1619,7 @@
         function setupPayInvoiceModal(cardId, invoiceDate) {
             const card = appState.cards.find(c => c.id === cardId);
             const { invoice } = getInvoiceDetails(card, invoiceDate);
-            const amountToPay = invoice.total - invoice.paid;
+            const amountToPay = invoice.adjustedTotal - invoice.paid;
             const amountForInput = `R$ ${(amountToPay / 100).toFixed(2).replace('.', ',')}`;
 
             const modalHTML = `
@@ -1770,7 +1820,7 @@
                     document.getElementById('remove-override-btn').addEventListener('click', () => {
                         delete appState.balanceOverrides[monthKey];
                         saveAppState();
-                        updateUI();
+                        renderHomePage();
                         closeModal();
                         showToast('Ajuste de saldo removido.');
                     });
@@ -1824,7 +1874,7 @@
                         delete appState.balanceOverrides[monthKey];
                         saveAppState();
                         renderList();
-                        updateUI();
+                        renderHomePage();
                         showToast('Ajuste removido.');
                     }
                 });
@@ -1857,9 +1907,9 @@
                         </div>
                         <div id="recurring-gasto-fields">
                              <div class="grid grid-cols-2 gap-4 mb-4">
-                                <div><label class="block text-sm font-medium text-slate-400 mb-1">Categoria</label><select id="recurringCategory" class="w-full bg-slate-700 p-2 rounded-lg">${categoriesHTML}</select></div>
-                                <div><label class="block text-sm font-medium text-slate-400 mb-1">Fonte</label><select id="recurringSource" class="w-full bg-slate-700 p-2 rounded-lg">${sourcesHTML}</select></div>
-                            </div>
+                                 <div><label class="block text-sm font-medium text-slate-400 mb-1">Categoria</label><select id="recurringCategory" class="w-full bg-slate-700 p-2 rounded-lg">${categoriesHTML}</select></div>
+                                 <div><label class="block text-sm font-medium text-slate-400 mb-1">Fonte</label><select id="recurringSource" class="w-full bg-slate-700 p-2 rounded-lg">${sourcesHTML}</select></div>
+                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4 mb-4">
                             <div><label class="block text-sm font-medium text-slate-400 mb-1">Data de Início</label><input type="date" id="recurringStartDate" value="${tx.startDate || toISODate(new Date())}" class="w-full bg-slate-700 p-2 rounded-lg" required></div>
@@ -1882,11 +1932,11 @@
                  const gastoFields = document.getElementById('recurring-gasto-fields');
 
                  const updateTypeButtons = () => {
-                    gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
-                    gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
-                    ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
-                    ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
-                    gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
+                     gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
+                     gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
+                     ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
+                     ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
+                     gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
                  };
 
                  gastoBtn.addEventListener('click', () => { typeInput.value = 'gasto'; updateTypeButtons(); });
@@ -1895,36 +1945,56 @@
                  updateTypeButtons();
 
                  if(isEditing) {
-                    document.getElementById('delete-recurring-btn').addEventListener('click', () => {
-                        setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
-                            appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
-                            generateRecurringTransactions(true);
-                            saveAppState();
-                            updateUI();
-                            closeModal();
-                            showToast('Transação recorrente excluída!');
-                        });
-                    });
+                     document.getElementById('delete-recurring-btn').addEventListener('click', () => {
+                         setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
+                             appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
+                             generateRecurringTransactions(true);
+                             saveAppState();
+                             renderHomePage();
+                             closeModal();
+                             showToast('Transação recorrente excluída!');
+                         });
+                     });
                  }
             });
         }
 
         function setupRecurringTxListModal() {
-            let listHTML = '<p class="text-slate-500">Nenhuma transação recorrente cadastrada.</p>';
-            if (appState.recurringTransactions && appState.recurringTransactions.length > 0) {
-                listHTML = appState.recurringTransactions.map(tx => {
-                    const isGasto = tx.type === 'gasto';
-                    return `
-                        <button class="edit-recurring-item w-full flex justify-between items-center bg-slate-700 p-3 rounded-lg hover:bg-slate-600" data-tx-id="${tx.id}">
-                            <div>
-                                <p class="font-semibold text-white">${tx.description}</p>
-                                <p class="text-sm text-slate-400">Todo dia ${tx.dayOfMonth} &bull; ${tx.durationMonths > 0 ? `${tx.durationMonths} meses` : 'Indefinido'}</p>
-                            </div>
+            const renderLists = (view = 'active') => {
+                const activeListContainer = document.getElementById('recurring-list-active');
+                const archivedListContainer = document.getElementById('recurring-list-archived');
+                
+                const activeTxs = appState.recurringTransactions.filter(tx => !tx.archived);
+                const archivedTxs = appState.recurringTransactions.filter(tx => tx.archived);
+
+                activeListContainer.innerHTML = activeTxs.length > 0 ? activeTxs.map(tx => renderRecurringTxItem(tx)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação recorrente ativa.</p>';
+                archivedListContainer.innerHTML = archivedTxs.length > 0 ? archivedTxs.map(tx => renderRecurringTxItem(tx, true)).join('') : '<p class="text-slate-500 p-4">Nenhuma transação arquivada.</p>';
+
+                document.getElementById('active-tx-tab').classList.toggle('active', view === 'active');
+                document.getElementById('archived-tx-tab').classList.toggle('active', view === 'archived');
+                activeListContainer.classList.toggle('hidden', view !== 'active');
+                archivedListContainer.classList.toggle('hidden', view === 'active');
+            };
+
+            const renderRecurringTxItem = (tx, isArchived = false) => {
+                const isGasto = tx.type === 'gasto';
+                const actionButton = isArchived 
+                    ? `<button class="unarchive-recurring-btn text-blue-400 hover:text-blue-300" data-tx-id="${tx.id}"><i class="fas fa-undo"></i></button>`
+                    : `<button class="edit-recurring-item text-slate-400 hover:text-white" data-tx-id="${tx.id}"><i class="fas fa-pencil-alt"></i></button>`;
+
+                return `
+                    <div class="flex justify-between items-center bg-slate-700 p-3 rounded-lg">
+                        <div>
+                            <p class="font-semibold text-white">${tx.description}</p>
+                            <p class="text-sm text-slate-400">Todo dia ${tx.dayOfMonth} &bull; ${tx.durationMonths > 0 ? `${tx.durationMonths} meses` : 'Indefinido'}</p>
+                        </div>
+                        <div class="flex items-center gap-4">
                             <p class="font-semibold ${isGasto ? 'text-red-400' : 'text-green-400'}">${formatCurrency(tx.amount)}</p>
-                        </button>
-                    `;
-                }).join('');
-            }
+                            ${actionButton}
+                        </div>
+                    </div>
+                `;
+            };
 
             const modalHTML = `
                 <div class="p-6">
@@ -1932,23 +2002,42 @@
                         <h2 class="text-xl font-bold text-white">Transações Recorrentes</h2>
                         <button id="add-new-recurring-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm"><i class="fas fa-plus mr-2"></i>Nova</button>
                     </div>
-                    <div id="recurring-list" class="space-y-2 max-h-80 overflow-y-auto pr-2">${listHTML}</div>
+                    <div class="bg-slate-800 p-1 rounded-lg flex justify-center gap-1 mb-4">
+                        <button id="active-tx-tab" class="view-btn flex-1 py-2 px-4 rounded-md text-sm font-semibold active">Ativas</button>
+                        <button id="archived-tx-tab" class="view-btn flex-1 py-2 px-4 rounded-md text-sm font-semibold">Arquivadas</button>
+                    </div>
+                    <div id="recurring-list-active" class="space-y-2 max-h-64 overflow-y-auto pr-2"></div>
+                    <div id="recurring-list-archived" class="space-y-2 max-h-64 overflow-y-auto pr-2 hidden"></div>
                     <div class="flex justify-end mt-6">
                         <button type="button" class="cancel-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg">Fechar</button>
                     </div>
                 </div>
             `;
             openModal(modalHTML, () => {
-                document.getElementById('recurring-list').addEventListener('click', e => {
-                    const target = e.target.closest('.edit-recurring-item');
-                    if (target) {
-                        setupRecurringTxModal(target.dataset.txId);
+                renderLists();
+                document.getElementById('active-tx-tab').addEventListener('click', () => renderLists('active'));
+                document.getElementById('archived-tx-tab').addEventListener('click', () => renderLists('archived'));
+                document.getElementById('add-new-recurring-btn').addEventListener('click', () => setupRecurringTxModal());
+                
+                document.getElementById('modal-backdrop').addEventListener('click', e => {
+                    const editTarget = e.target.closest('.edit-recurring-item');
+                    if (editTarget) {
+                        setupRecurringTxModal(editTarget.dataset.txId);
+                    }
+                    const unarchiveTarget = e.target.closest('.unarchive-recurring-btn');
+                    if(unarchiveTarget) {
+                        const tx = appState.recurringTransactions.find(t => t.id === unarchiveTarget.dataset.txId);
+                        if(tx) {
+                            tx.archived = false;
+                            saveAppState();
+                            renderLists('archived');
+                            showToast('Transação desarquivada!');
+                        }
                     }
                 });
-                document.getElementById('add-new-recurring-btn').addEventListener('click', () => setupRecurringTxModal());
             });
         }
-
+        
         // ===============================================
         // F. BACKUP MANUAL, AUTH MODAL & CSV
         // ===============================================
@@ -2226,7 +2315,7 @@
                     });
                     
                     saveAppState();
-                    updateUI();
+                    renderHomePage();
                     closeModal();
                     showToast(`${addedCount} transações importadas.`);
                 } catch(error) {
@@ -2457,6 +2546,14 @@
         // ===============================================
         
         document.body.addEventListener('click', e => {
+            // Botões de login inicial
+            if (e.target.closest('#anonymous-login-btn')) {
+                signInAnonymously(auth).catch(error => console.error("Erro no login anônimo:", error));
+            }
+            if (e.target.closest('#go-to-login-btn')) {
+                setupAuthModal();
+            }
+
             if (e.target.closest('.nav-item')) navigateTo(e.target.closest('.nav-item').dataset.page);
             if (e.target.closest('#nav-add-transaction-btn')) setupTransactionModal();
             if (e.target.closest('#settingsButton')) setupSettingsModal();
@@ -2480,7 +2577,7 @@
                 e.stopPropagation();
                 setupCardModal(e.target.closest('.edit-card-btn').dataset.cardId);
             }
-            if (e.target.closest('[data-card-id]') && !e.target.closest('.edit-card-btn') && !e.target.closest('.pay-invoice-btn')) {
+            if (e.target.closest('[data-card-id]') && !e.target.closest('.edit-card-btn') && !e.target.closest('.pay-invoice-btn') && !e.target.closest('.adjust-invoice-btn')) {
                 const cardId = e.target.closest('[data-card-id]').dataset.cardId;
                 appState.ui.selectedCardId = cardId;
                 appState.ui.selectedInvoiceDate = appState.cardsView.date;
@@ -2537,7 +2634,8 @@
                 viewBtn.classList.add('active');
                 appState[`${context}View`].viewMode = viewBtn.dataset.view;
                 saveAppState();
-                updateUI();
+                if(context === 'home') renderHomePage();
+                else if (context === 'cards') renderCardsPage();
             }
 
             const dateNavBtn = e.target.closest('.date-nav-btn');
@@ -2564,10 +2662,13 @@
                 stateObject[dateKey] = newDate.toISOString();
                 saveAppState();
 
+                // CORREÇÃO DO BUG: Chamar a função de renderização específica do contexto
                 if (context === 'planning') {
                     renderPlanningPage();
+                } else if (context === 'cards') {
+                    renderCardsPage();
                 } else {
-                    updateUI();
+                    renderHomePage();
                 }
             }
             
@@ -2583,9 +2684,13 @@
             if (e.target.id === 'modal-backdrop' || e.target.closest('.cancel-btn')) closeModal();
 
             if (e.target.closest('.pay-invoice-btn')) {
-                const cardId = e.target.closest('.pay-invoice-btn').dataset.cardId;
-                const invoiceDate = e.target.closest('.pay-invoice-btn').dataset.invoiceDate;
+                const { cardId, invoiceDate } = e.target.closest('.pay-invoice-btn').dataset;
                 setupPayInvoiceModal(cardId, invoiceDate);
+            }
+            // NOVO: Handler para o botão de ajuste de fatura
+            if (e.target.closest('.adjust-invoice-btn')) {
+                const { cardId, invoiceDate } = e.target.closest('.adjust-invoice-btn').dataset;
+                setupAdjustInvoiceModal(cardId, invoiceDate);
             }
             
             // Handlers para o modal de backup manual
@@ -2662,7 +2767,7 @@
                         }
                         appState.transactions[txIndex] = { ...appState.transactions[txIndex], amount: amountInCents, description, ...txPayload };
                         saveAppState();
-                        updateUI(); closeModal(); showToast('Transação atualizada!');
+                        renderHomePage(); closeModal(); showToast('Transação atualizada!');
                     }
                 } else {
                     const installmentsInput = document.getElementById('installments');
@@ -2684,7 +2789,7 @@
                         appState.transactions.push({ id: `tx${Date.now()}`, amount: amountInCents, description, ...txPayload, isInstallment: false });
                     }
                     saveAppState();
-                    updateUI(); closeModal(); showToast('Transação salva!');
+                    renderHomePage(); closeModal(); showToast('Transação salva!');
                 }
             }
             else if (e.target.id === 'categoryForm') {
@@ -2700,7 +2805,7 @@
                     appState.categories.push({ name, ...payload });
                 }
                 saveAppState();
-                updateUI(); closeModal(); showToast('Categoria salva!');
+                renderHomePage(); closeModal(); showToast('Categoria salva!');
             }
             else if (e.target.id === 'cardForm') {
                  const name = document.getElementById('cardName').value.trim();
@@ -2714,7 +2819,7 @@
                      appState.cards.push({ id: `c${Date.now()}`, name, ...payload });
                  }
                  saveAppState();
-                 updateUI(); closeModal(); showToast('Cartão salvo!');
+                 renderCardsPage(); closeModal(); showToast('Cartão salvo!');
             }
             else if (e.target.id === 'payInvoiceForm') {
                 const cardId = e.target.dataset.cardId;
@@ -2731,7 +2836,7 @@
                         paidCardId: cardId, invoiceDueDate: dueDate.toISOString() 
                     });
                     saveAppState();
-                    updateUI(); closeModal(); showToast('Pagamento registrado!');
+                    renderCardsPage(); closeModal(); showToast('Pagamento registrado!');
                 } else { showToast('Valor de pagamento inválido.', 'error'); }
             }
             else if (e.target.id === 'planningCategoryForm') {
@@ -2774,7 +2879,7 @@
 
                 if (transactionsAdded > 0) {
                     saveAppState();
-                    updateUI();
+                    renderHomePage();
                     showToast(`${transactionsAdded} transação(ões) adicionadas com sucesso!`);
                 } else {
                     showToast('Nenhuma transação foi adicionada.', 'info');
@@ -2787,7 +2892,7 @@
                 const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
                 appState.balanceOverrides[monthKey] = newBalance;
                 saveAppState();
-                updateUI();
+                renderHomePage();
                 closeModal();
                 showToast('Saldo ajustado com sucesso!');
             }
@@ -2804,7 +2909,8 @@
                     source: document.getElementById('recurringSource').value,
                     dayOfMonth: dayOfMonth,
                     durationMonths: parseInt(document.getElementById('recurringDuration').value) || 0,
-                    startDate: startDate
+                    startDate: startDate,
+                    archived: false // Sempre começa como não-arquivado
                 };
 
                 if (!payload.description || payload.amount <= 0) {
@@ -2823,7 +2929,7 @@
                 
                 generateRecurringTransactions(true);
                 saveAppState();
-                updateUI();
+                renderHomePage();
                 closeModal();
                 showToast('Transação recorrente salva!');
             }
@@ -2838,7 +2944,8 @@
                 const [year, month, day] = dateValue.split('-');
                 appState[viewKey][key] = new Date(Date.UTC(year, month - 1, day)).toISOString();
                 saveAppState();
-                updateUI();
+                if(context === 'home') renderHomePage();
+                else if (context === 'cards') renderCardsPage();
             }
             if (e.target.closest('#default-payment')) {
                 appState.settings.defaultPaymentSource = e.target.value;
@@ -2897,7 +3004,7 @@
         async function handleSignOut() {
             try {
                 await signOut(auth);
-                // O onAuthStateChanged vai lidar com a criação de um novo usuário anônimo
+                // O onAuthStateChanged vai lidar com a exibição da tela de escolha
                 showToast("Você saiu da sua conta.", "success");
                 closeModal();
             } catch (error) {
@@ -2912,6 +3019,8 @@
 
         function initializeUI() {
             if (!appState || !appState.settings) return;
+            archiveCompletedRecurringTxs(); // NOVO: Arquiva recorrências concluídas
+            generateRecurringTransactions();
             applyNavPosition();
             navigateTo('home');
             updateUndoRedoButtons();
@@ -2928,6 +3037,8 @@
             }
 
             appState.recurringTransactions.forEach(model => {
+                if(model.archived) return; // NOVO: Não gera transações arquivadas
+
                 let startDate = new Date(model.startDate + 'T12:00:00Z');
                 let currentDate = new Date(startDate);
                 currentDate.setUTCDate(model.dayOfMonth);
@@ -2971,6 +3082,31 @@
             });
         }
 
+        // NOVO: Função para arquivar recorrências concluídas
+        function archiveCompletedRecurringTxs() {
+            const today = new Date();
+            today.setUTCHours(0,0,0,0);
+            let changed = false;
+
+            appState.recurringTransactions.forEach(tx => {
+                if(tx.durationMonths && tx.durationMonths > 0 && !tx.archived) {
+                    const startDate = new Date(tx.startDate + 'T12:00:00Z');
+                    const endDate = new Date(startDate);
+                    endDate.setUTCMonth(endDate.getUTCMonth() + tx.durationMonths);
+
+                    if(today > endDate) {
+                        tx.archived = true;
+                        changed = true;
+                    }
+                }
+            });
+
+            if(changed) {
+                console.log("Transações recorrentes concluídas foram arquivadas.");
+                saveAppState();
+            }
+        }
+
         function getInitialState() {
             return {
                 version: APP_VERSION,
@@ -2995,6 +3131,7 @@
                 chatHistory: [],
                 recurringTransactions: [],
                 balanceOverrides: {},
+                invoiceOverrides: {}, // NOVO
                 homeView: { viewMode: 'monthly', date: new Date().toISOString(), customStart: new Date().toISOString(), customEnd: new Date().toISOString() },
                 cardsView: { viewMode: 'monthly', date: new Date().toISOString() },
                 planningView: { viewMode: 'monthly', date: new Date().toISOString() },
