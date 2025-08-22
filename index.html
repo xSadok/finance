@@ -3201,4 +3201,37 @@
                     { name: 'Viagem', icon: 'fas fa-plane', color: '#0ea5e9', budget: null },
                     { name: 'Serviços', icon: 'fas fa-concierge-bell', color: '#14b8a6', budget: null },
                     { name: 'Pagamentos', icon: 'fas fa-money-check-alt', color: '#10b981', budget: null },
-                    { name: 'Ajustes', icon: 'fas fa-magic', color: '#64748b', budget: null }, // N
+                    { name: 'Ajustes', icon: 'fas fa-magic', color: '#64748b', budget: null }, // NOVO
+                    { name: 'Outros', icon: 'fas fa-ellipsis-h', color: '#6b7280', budget: null }
+                ],
+                planning: {},
+                chatHistory: [],
+                recurringTransactions: [],
+                archivedRecurringTransactions: [],
+                balanceOverrides: {},
+                homeView: { viewMode: 'monthly', date: new Date().toISOString(), customStart: new Date().toISOString(), customEnd: new Date().toISOString() },
+                cardsView: { viewMode: 'monthly', date: new Date().toISOString() },
+                planningView: { viewMode: 'monthly', date: new Date().toISOString() },
+                settings: { navPosition: 'bottom', defaultPaymentSource: 'carteira', categoryExpenseMethod: 'purchaseDate' },
+                ui: { categoriesExpanded: false, selectedCardId: null, selectedInvoiceDate: new Date().toISOString() }
+            };
+        }
+
+        // Inicia a conexão com o Firebase quando o DOM estiver pronto
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('welcome-anonymous-btn').addEventListener('click', () => {
+                signInAnonymously(auth).catch(error => {
+                    console.error("Erro no login anônimo:", error);
+                    showToast("Não foi possível entrar anonimamente.", "error");
+                });
+            });
+
+            document.getElementById('welcome-login-btn').addEventListener('click', () => {
+                setupAuthModal();
+            });
+
+            initFirebase();
+        });
+    </script>
+</body>
+</html>
