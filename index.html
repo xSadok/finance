@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Estilos CSS gerais permanecem os mesmos */
+        /* Estilos CSS permanecem os mesmos da versão anterior */
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
         body { 
             font-family: 'Inter', sans-serif; 
@@ -292,32 +292,13 @@
             background-color: #4f46e5;
             color: white;
         }
-        
-        /* Estilos para o Modal de Recorrentes */
-        .recurring-tab-btn.active {
-            border-color: #6366f1;
-            color: #a5b4fc;
-        }
 
     </style>
 </head>
 <body class="bg-slate-900 text-slate-300 antialiased">
 
-    <!-- Overlay de Boas-vindas -->
-    <div id="welcome-overlay" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 z-[10000]">
-        <div class="text-center">
-            <i class="fas fa-wallet text-6xl text-indigo-400 mb-6"></i>
-            <h1 class="text-4xl font-bold text-white mb-2">Meu Gestor Financeiro</h1>
-            <p class="text-slate-400 mb-8">Seu assistente pessoal para controle de despesas.</p>
-            <div class="space-y-4 max-w-sm mx-auto">
-                <button id="welcome-login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Fazer Login ou Criar Conta</button>
-                <button id="welcome-anonymous-btn" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Continuar como Anônimo</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Overlay de Carregamento -->
-    <div id="loading-overlay" class="hidden">
+    <div id="loading-overlay">
         <div class="spinner"></div>
         <p class="text-white mt-4 font-semibold">Conectando...</p>
     </div>
@@ -448,7 +429,7 @@
         // ===============================================
         // A. STATE, CONFIG & FIREBASE SETUP
         // ===============================================
-        const APP_VERSION = 4.0; // Versão com fluxo de login e arquivamento
+        const APP_VERSION = 3.3; // Versão com correções e melhorias
 
         // =======================================================================
         // PLACEHOLDERS PARA GITHUB ACTIONS - NÃO EDITE DIRETAMENTE
@@ -485,7 +466,7 @@
             try {
                 // Verifica se as chaves foram substituídas. Se não, mostra um erro.
                 if (firebaseConfig.apiKey.startsWith("__FIREBASE")) {
-                    document.getElementById('welcome-overlay').innerHTML = `<div class="text-center"><p class="text-red-400 p-4">Erro de configuração.<br>O aplicativo não foi publicado corretamente.</p></div>`;
+                    document.getElementById('loading-overlay').innerHTML = `<p class="text-red-400 text-center p-4">Erro de configuração.<br>O aplicativo não foi publicado corretamente.</p>`;
                     return;
                 }
 
@@ -498,21 +479,20 @@
                     updateAuthUI(user); // Atualiza a UI com base no status do usuário
                     if (user) {
                         // Usuário está logado (anonimamente ou não)
-                        // Esconde a tela de boas-vindas e mostra o carregamento
-                        document.getElementById('welcome-overlay').style.display = 'none';
-                        const loadingOverlay = document.getElementById('loading-overlay');
-                        loadingOverlay.classList.remove('hidden');
-                        loadingOverlay.style.opacity = '1';
-
                         userId = user.uid;
                         console.log("Usuário autenticado com ID:", userId);
                         setupRealtimeListener(userId); // Começa a ouvir os dados do usuário
-                    } 
-                    // Se não há usuário, o app simplesmente espera na tela de boas-vindas.
+                    } else {
+                        // Usuário não está logado, tenta fazer login anônimo
+                        console.log("Nenhum usuário. Tentando login anônimo...");
+                        signInAnonymously(auth).catch(error => {
+                            console.error("Erro no login anônimo:", error);
+                        });
+                    }
                 });
             } catch (error) {
                 console.error("Erro ao inicializar o Firebase:", error);
-                document.getElementById('welcome-overlay').innerHTML = `<div class="text-center"><p class="text-red-400 p-4">Erro de configuração do Firebase.<br>Verifique o objeto 'firebaseConfig' no código.</p></div>`;
+                document.getElementById('loading-overlay').innerHTML = `<p class="text-red-400 text-center p-4">Erro de configuração do Firebase.<br>Verifique o objeto 'firebaseConfig' no código.</p>`;
             }
         }
 
@@ -552,20 +532,16 @@
                     
                     if (!appState.chatHistory) appState.chatHistory = [];
                     if (!appState.recurringTransactions) appState.recurringTransactions = [];
-                    if (!appState.archivedRecurringTransactions) appState.archivedRecurringTransactions = []; // NOVO
                     if (!appState.balanceOverrides) appState.balanceOverrides = {};
                     if (!appState.settings) appState.settings = getInitialState().settings;
-
-                    // Verifica e arquiva transações recorrentes expiradas
-                    const stateWasChanged = archiveExpiredRecurringTransactions();
-                    generateRecurringTransactions(true); // Sempre regenera após a verificação
-
-                    initializeUI();
-
-                    if (stateWasChanged) {
-                        saveAppStateToFirestore(); // Salva o estado se algo foi arquivado
+                    
+                    // Limpa recorrências expiradas ao carregar os dados
+                    const archived = archiveExpiredRecurringTransactions();
+                    if (archived) {
+                        saveAppStateToFirestore(); // Salva o estado limpo
                     }
 
+                    initializeUI();
                 } else {
                     console.log("Nenhum dado encontrado. Criando estado inicial.");
                     appState = getInitialState();
@@ -579,7 +555,7 @@
                 
                 document.getElementById('loading-overlay').style.opacity = '0';
                 setTimeout(() => {
-                    document.getElementById('loading-overlay').classList.add('hidden');
+                    document.getElementById('loading-overlay').style.display = 'none';
                 }, 300);
                 
                 isProcessingUpdate = false;
@@ -1166,7 +1142,7 @@
                     }
                 }).join('');
             }
-            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.total)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p>${status !== 'Paga' ? `<button class="pay-invoice-btn mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}</div></div></div><div>${transactionsHTML}</div></div>`;
+            container.innerHTML = `<div class="bg-slate-800 rounded-lg shadow-lg"><div class="p-4"><div class="flex justify-between items-center mb-2"><div><p class="text-sm text-slate-400">Vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</p><p class="text-2xl font-bold text-white">${formatCurrency(remainingValue)}</p>${invoice.paid > 0 ? `<p class="text-xs text-green-400">Total ${formatCurrency(invoice.total)} / Pago ${formatCurrency(invoice.paid)}</p>` : ''}</div><div class="text-right"><p class="text-sm font-semibold ${statusColor}">${status}</p><div class="flex gap-2 mt-2"><button class="edit-invoice-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Editar</button>${status !== 'Paga' ? `<button class="pay-invoice-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-card-id="${card.id}" data-invoice-date="${appState.ui.selectedInvoiceDate}">Pagar</button>`: ''}</div></div></div></div><div>${transactionsHTML}</div></div>`;
         }
 
         function renderPlanningPage() {
@@ -1912,11 +1888,11 @@
                  const gastoFields = document.getElementById('recurring-gasto-fields');
 
                  const updateTypeButtons = () => {
-                     gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
-                     gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
-                     ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
-                     ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
-                     gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
+                    gastoBtn.classList.toggle('selected', typeInput.value === 'gasto');
+                    gastoBtn.classList.toggle('gasto', typeInput.value === 'gasto');
+                    ganhoBtn.classList.toggle('selected', typeInput.value === 'ganho');
+                    ganhoBtn.classList.toggle('ganho', typeInput.value === 'ganho');
+                    gastoFields.style.display = typeInput.value === 'gasto' ? 'block' : 'none';
                  };
 
                  gastoBtn.addEventListener('click', () => { typeInput.value = 'gasto'; updateTypeButtons(); });
@@ -1925,27 +1901,27 @@
                  updateTypeButtons();
 
                  if(isEditing) {
-                     document.getElementById('delete-recurring-btn').addEventListener('click', () => {
-                         setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
-                             appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
-                             generateRecurringTransactions(true);
-                             saveAppState();
-                             updateUI();
-                             closeModal();
-                             showToast('Transação recorrente excluída!');
-                         });
-                     });
+                    document.getElementById('delete-recurring-btn').addEventListener('click', () => {
+                        setupConfirmModal(`Deseja excluir a transação recorrente "${tx.description}" e todas as suas futuras ocorrências?`, () => {
+                            appState.recurringTransactions = appState.recurringTransactions.filter(t => t.id !== txId);
+                            generateRecurringTransactions(true);
+                            saveAppState();
+                            updateUI();
+                            closeModal();
+                            showToast('Transação recorrente excluída!');
+                        });
+                    });
                  }
             });
         }
 
         function setupRecurringTxListModal() {
-            let activeListHTML = '<p class="text-slate-500">Nenhuma transação recorrente cadastrada.</p>';
+            let listHTML = '<p class="text-slate-500">Nenhuma transação recorrente cadastrada.</p>';
             if (appState.recurringTransactions && appState.recurringTransactions.length > 0) {
-                activeListHTML = appState.recurringTransactions.map(tx => {
+                listHTML = appState.recurringTransactions.map(tx => {
                     const isGasto = tx.type === 'gasto';
                     return `
-                        <button class="edit-recurring-item w-full flex justify-between items-center bg-slate-700 p-3 rounded-lg hover:bg-slate-600 text-left" data-tx-id="${tx.id}">
+                        <button class="edit-recurring-item w-full flex justify-between items-center bg-slate-700 p-3 rounded-lg hover:bg-slate-600" data-tx-id="${tx.id}">
                             <div>
                                 <p class="font-semibold text-white">${tx.description}</p>
                                 <p class="text-sm text-slate-400">Todo dia ${tx.dayOfMonth} &bull; ${tx.durationMonths > 0 ? `${tx.durationMonths} meses` : 'Indefinido'}</p>
@@ -1956,72 +1932,26 @@
                 }).join('');
             }
 
-            let archivedListHTML = '<p class="text-slate-500">Nenhuma transação recorrente arquivada.</p>';
-            if (appState.archivedRecurringTransactions && appState.archivedRecurringTransactions.length > 0) {
-                archivedListHTML = [...appState.archivedRecurringTransactions].sort((a,b) => new Date(b.startDate) - new Date(a.startDate)).map(tx => {
-                    const isGasto = tx.type === 'gasto';
-                    const startDate = new Date(tx.startDate + 'T12:00:00Z');
-                    const endDate = new Date(startDate);
-                    endDate.setUTCMonth(endDate.getUTCMonth() + tx.durationMonths);
-                    return `
-                        <div class="w-full flex justify-between items-center bg-slate-700/50 p-3 rounded-lg opacity-70">
-                            <div>
-                                <p class="font-semibold text-white">${tx.description}</p>
-                                <p class="text-sm text-slate-400">De ${startDate.toLocaleDateString('pt-BR', {timeZone:'UTC'})} a ${endDate.toLocaleDateString('pt-BR', {timeZone:'UTC'})}</p>
-                            </div>
-                            <p class="font-semibold ${isGasto ? 'text-red-400' : 'text-green-400'}">${formatCurrency(tx.amount)}</p>
-                        </div>
-                    `;
-                }).join('');
-            }
-
             const modalHTML = `
                 <div class="p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-bold text-white">Transações Recorrentes</h2>
                         <button id="add-new-recurring-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm"><i class="fas fa-plus mr-2"></i>Nova</button>
                     </div>
-                    <div class="flex border-b border-slate-700 mb-4">
-                        <button id="active-recurring-tab" class="recurring-tab-btn py-2 px-4 text-sm font-medium border-b-2 active">Ativas</button>
-                        <button id="archived-recurring-tab" class="recurring-tab-btn py-2 px-4 text-sm font-medium border-b-2 border-transparent text-slate-400">Arquivadas</button>
-                    </div>
-                    <div id="recurring-list-active" class="space-y-2 max-h-80 overflow-y-auto pr-2">${activeListHTML}</div>
-                    <div id="recurring-list-archived" class="hidden space-y-2 max-h-80 overflow-y-auto pr-2">${archivedListHTML}</div>
+                    <div id="recurring-list" class="space-y-2 max-h-80 overflow-y-auto pr-2">${listHTML}</div>
                     <div class="flex justify-end mt-6">
                         <button type="button" class="cancel-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg">Fechar</button>
                     </div>
                 </div>
             `;
             openModal(modalHTML, () => {
-                const activeTab = document.getElementById('active-recurring-tab');
-                const archivedTab = document.getElementById('archived-recurring-tab');
-                const activeList = document.getElementById('recurring-list-active');
-                const archivedList = document.getElementById('recurring-list-archived');
-                const addNewBtn = document.getElementById('add-new-recurring-btn');
-
-                activeTab.addEventListener('click', () => {
-                    activeTab.classList.add('active');
-                    archivedTab.classList.remove('active');
-                    activeList.classList.remove('hidden');
-                    archivedList.classList.add('hidden');
-                    addNewBtn.style.display = 'block';
-                });
-
-                archivedTab.addEventListener('click', () => {
-                    archivedTab.classList.add('active');
-                    activeTab.classList.remove('active');
-                    archivedList.classList.remove('hidden');
-                    activeList.classList.add('hidden');
-                    addNewBtn.style.display = 'none';
-                });
-
-                document.getElementById('recurring-list-active').addEventListener('click', e => {
+                document.getElementById('recurring-list').addEventListener('click', e => {
                     const target = e.target.closest('.edit-recurring-item');
                     if (target) {
                         setupRecurringTxModal(target.dataset.txId);
                     }
                 });
-                addNewBtn.addEventListener('click', () => setupRecurringTxModal());
+                document.getElementById('add-new-recurring-btn').addEventListener('click', () => setupRecurringTxModal());
             });
         }
 
@@ -2556,7 +2486,7 @@
                 e.stopPropagation();
                 setupCardModal(e.target.closest('.edit-card-btn').dataset.cardId);
             }
-            if (e.target.closest('[data-card-id]') && !e.target.closest('.edit-card-btn') && !e.target.closest('.pay-invoice-btn')) {
+            if (e.target.closest('[data-card-id]') && !e.target.closest('.edit-card-btn') && !e.target.closest('.pay-invoice-btn') && !e.target.closest('.edit-invoice-btn')) {
                 const cardId = e.target.closest('[data-card-id]').dataset.cardId;
                 appState.ui.selectedCardId = cardId;
                 appState.ui.selectedInvoiceDate = appState.cardsView.date;
@@ -2638,11 +2568,11 @@
                 }
                 
                 stateObject[dateKey] = newDate.toISOString();
-                saveAppState();
-
+                
+                // CORREÇÃO: Não salva o estado inteiro, apenas atualiza a UI localmente.
                 if (context === 'planning') {
                     renderPlanningPage();
-                } else if (context === 'cards') { // CORREÇÃO DO BUG
+                } else if (context === 'cards') {
                     renderCardsPage();
                 } else {
                     updateUI();
@@ -2664,6 +2594,12 @@
                 const cardId = e.target.closest('.pay-invoice-btn').dataset.cardId;
                 const invoiceDate = e.target.closest('.pay-invoice-btn').dataset.invoiceDate;
                 setupPayInvoiceModal(cardId, invoiceDate);
+            }
+            
+            if (e.target.closest('.edit-invoice-btn')) {
+                const cardId = e.target.closest('.edit-invoice-btn').dataset.cardId;
+                const invoiceDate = e.target.closest('.edit-invoice-btn').dataset.invoiceDate;
+                setupEditInvoiceModal(cardId, invoiceDate);
             }
             
             // Handlers para o modal de backup manual
@@ -2812,6 +2748,34 @@
                     updateUI(); closeModal(); showToast('Pagamento registrado!');
                 } else { showToast('Valor de pagamento inválido.', 'error'); }
             }
+             else if (e.target.id === 'editInvoiceForm') {
+                const cardId = e.target.dataset.cardId;
+                const invoiceDate = e.target.dataset.invoiceDate;
+                const amount = parseCurrency(document.getElementById('invoiceAdjustmentAmount').value);
+                const description = document.getElementById('invoiceAdjustmentDescription').value;
+                
+                if (description && amount > 0) {
+                    const card = appState.cards.find(c => c.id === cardId);
+                    const { closeDate } = getInvoiceDates(card, new Date(invoiceDate));
+                    
+                    const newTx = {
+                        id: `tx${Date.now()}adj`,
+                        description: description,
+                        amount: amount,
+                        type: 'gasto',
+                        category: 'Outros',
+                        source: cardId,
+                        date: toISODate(closeDate),
+                        isInstallment: false
+                    };
+                    appState.transactions.push(newTx);
+                    saveAppState();
+                    closeModal();
+                    showToast('Ajuste de fatura adicionado!');
+                } else {
+                    showToast('Descrição e valor são obrigatórios.', 'error');
+                }
+            }
             else if (e.target.id === 'planningCategoryForm') {
                 const categoryName = document.getElementById('planningCategoryName').value;
                 const budget = parseCurrency(document.getElementById('planningCategoryBudget').value);
@@ -2942,15 +2906,7 @@
             const currentUser = auth.currentUser;
 
             if (!currentUser || !currentUser.isAnonymous) {
-                // Se não houver usuário anônimo, crie um primeiro.
-                try {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    showToast("Conta criada com sucesso!", "success");
-                    closeModal();
-                } catch (error) {
-                    console.error("Erro ao criar conta:", error);
-                    showToast(`Erro: ${error.message}`, "error");
-                }
+                showToast("Erro: Nenhum usuário anônimo para vincular.", "error");
                 return;
             }
 
@@ -2960,7 +2916,7 @@
                 showToast("Conta criada e dados vinculados com sucesso!", "success");
                 closeModal();
             } catch (error) {
-                console.error("Erro ao vincular conta:", error);
+                console.error("Erro ao criar conta:", error);
                 showToast(`Erro: ${error.message}`, "error");
             }
         }
@@ -2986,8 +2942,6 @@
                 // O onAuthStateChanged vai lidar com a criação de um novo usuário anônimo
                 showToast("Você saiu da sua conta.", "success");
                 closeModal();
-                // Recarrega a página para mostrar a tela de boas-vindas
-                window.location.reload();
             } catch (error) {
                 console.error("Erro ao sair:", error);
                 showToast(`Erro: ${error.message}`, "error");
@@ -3005,38 +2959,6 @@
             updateUndoRedoButtons();
         }
         
-        function archiveExpiredRecurringTransactions() {
-            if (!appState.recurringTransactions || appState.recurringTransactions.length === 0) return false;
-
-            const today = new Date();
-            today.setUTCHours(0, 0, 0, 0);
-
-            const expiredTx = appState.recurringTransactions.filter(tx => {
-                if (!tx.durationMonths || tx.durationMonths <= 0) return false; // Não é uma transação de duração fixa
-                const startDate = new Date(tx.startDate + 'T12:00:00Z');
-                const endDate = new Date(startDate);
-                endDate.setUTCMonth(endDate.getUTCMonth() + tx.durationMonths);
-                return endDate < today;
-            });
-
-            if (expiredTx.length > 0) {
-                // Filtra as transações expiradas da lista ativa
-                appState.recurringTransactions = appState.recurringTransactions.filter(tx => !expiredTx.some(e => e.id === tx.id));
-
-                // Adiciona à lista de arquivadas, evitando duplicatas
-                if (!appState.archivedRecurringTransactions) {
-                    appState.archivedRecurringTransactions = [];
-                }
-                const archivedIds = new Set(appState.archivedRecurringTransactions.map(t => t.id));
-                const newToArchive = expiredTx.filter(tx => !archivedIds.has(tx.id));
-                appState.archivedRecurringTransactions.push(...newToArchive);
-
-                console.log(`Arquivadas ${newToArchive.length} transações recorrentes.`);
-                return true; // O estado foi alterado
-            }
-            return false;
-        }
-
         function generateRecurringTransactions(forceRegen = false) {
             const today = new Date();
             today.setUTCHours(0,0,0,0);
@@ -3044,8 +2966,7 @@
             projectionEndDate.setUTCMonth(projectionEndDate.getUTCMonth() + 24);
 
             if (forceRegen) {
-                // Remove apenas as futuras, mantém as passadas
-                appState.transactions = appState.transactions.filter(tx => !tx.recurringId || new Date(tx.date + 'T12:00:00Z') < today);
+                appState.transactions = appState.transactions.filter(tx => !tx.recurringId || new Date(tx.date) < today);
             }
 
             appState.recurringTransactions.forEach(model => {
@@ -3091,6 +3012,34 @@
                 }
             });
         }
+        
+        // NOVA FUNÇÃO: Limpa transações recorrentes que já expiraram.
+        function archiveExpiredRecurringTransactions() {
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
+            let archivedCount = 0;
+
+            const activeRecurring = appState.recurringTransactions.filter(model => {
+                if (model.durationMonths > 0) {
+                    const startDate = new Date(model.startDate + 'T12:00:00Z');
+                    const endDate = new Date(startDate);
+                    endDate.setUTCMonth(endDate.getUTCMonth() + model.durationMonths);
+                    
+                    if (endDate < today) {
+                        archivedCount++;
+                        showToast(`Transação recorrente "${model.description}" foi finalizada e arquivada.`, 'info');
+                        return false; // Remove da lista
+                    }
+                }
+                return true; // Mantém na lista
+            });
+
+            if (archivedCount > 0) {
+                appState.recurringTransactions = activeRecurring;
+                return true; // Indica que houve mudanças
+            }
+            return false;
+        }
 
         function getInitialState() {
             return {
@@ -3115,7 +3064,6 @@
                 planning: {},
                 chatHistory: [],
                 recurringTransactions: [],
-                archivedRecurringTransactions: [],
                 balanceOverrides: {},
                 homeView: { viewMode: 'monthly', date: new Date().toISOString(), customStart: new Date().toISOString(), customEnd: new Date().toISOString() },
                 cardsView: { viewMode: 'monthly', date: new Date().toISOString() },
@@ -3127,17 +3075,6 @@
 
         // Inicia a conexão com o Firebase quando o DOM estiver pronto
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('welcome-anonymous-btn').addEventListener('click', () => {
-                signInAnonymously(auth).catch(error => {
-                    console.error("Erro no login anônimo:", error);
-                    showToast("Não foi possível entrar anonimamente.", "error");
-                });
-            });
-
-            document.getElementById('welcome-login-btn').addEventListener('click', () => {
-                setupAuthModal();
-            });
-
             initFirebase();
         });
     </script>
