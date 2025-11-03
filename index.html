@@ -1419,10 +1419,10 @@
             const card = isEditing ? appState.cards.find(c => c.id === cardId) : {};
             const limitForInput = isEditing && card.limit ? (card.limit / 100).toFixed(2).replace('.', ',') : '';
             const colorPalette = ['#4f46e5', '#3b82f6', '#10b981', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#6b7280'];
-            const brands = [{ id: 'visa', name: 'Visa', logo: 'https://placehold.co/100x60/FFFFFF/000000?text=VISA' }, { id: 'mastercard', name: 'Mastercard', logo: 'https://placehold.co/100x60/FFFFFF/000000?text=MC' }, { id: 'elo', name: 'Elo', logo: 'https://placehold.co/100x60/FFFFFF/000000?text=ELO' }, { id: 'amex', name: 'American Express', logo: 'https://placehold.co/100x60/FFFFFF/000000?text=AMEX' }];
+            const brands = [{ id: 'visa', name: 'Visa' }, { id: 'mastercard', name: 'Mastercard' }, { id: 'elo', name: 'Elo' }, { id: 'amex', name: 'American Express' }];
             let swatchesHTML = colorPalette.map(color => `<div class="color-swatch ${card.color === color ? 'selected' : ''}" style="background-color: ${color}" data-color="${color}"></div>`).join('');
             swatchesHTML += `<div class="color-swatch relative flex items-center justify-center bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500" id="custom-color-swatch-container"><i class="fas fa-plus text-white/70"></i><input type="color" id="custom-color-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value="${card.color || '#4f46e5'}"></div>`;
-            let brandsHTML = brands.map(brand => `<img src="${brand.logo}" alt="${brand.name}" data-brand="${brand.id}" class="brand-logo h-10 p-1 rounded-md cursor-pointer bg-slate-700/50 ${card.brand === brand.id ? 'selected' : ''}">`).join('');
+            let brandsHTML = brands.map(brand => `<img src="${getBrandLogo(brand.id)}" alt="${brand.name}" data-brand="${brand.id}" class="brand-logo h-10 p-1 rounded-md cursor-pointer bg-slate-700/50 ${card.brand === brand.id ? 'selected' : ''}">`).join('');
 
             const modalHTML = `
                 <div class="p-6">
